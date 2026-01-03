@@ -1,0 +1,15 @@
+apiVersion: v1
+kind: Service
+metadata:
+  name: visitors-frontend-service
+  labels:
+    app: visitors
+    tier: frontend
+spec:
+  type: clusterIP
+  ports:
+    - port: 3000
+      protocol: TCP
+  selector:
+    app: visitors
+    tier: frontend
