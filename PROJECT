@@ -4,17 +4,10 @@
 # More info: https://book.kubebuilder.io/reference/project-config.html
 domain: osuk8s.site
 layout:
-- helm.sdk.operatorframework.io/v1
+- go.kubebuilder.io/v4
 plugins:
   manifests.sdk.operatorframework.io/v2: {}
   scorecard.sdk.operatorframework.io/v2: {}
-projectName: visitors-helm-operator
-resources:
-- api:
-    crdVersion: v1
-    namespaced: true
-  domain: osuk8s.site
-  group: apps
-  kind: VisitorsApp
-  version: v1
+projectName: kubernetesstudyoperatorsdk
+repo: github.com/zooeymoon1989/kubernetesStudyOperatorSDK
 version: "3"
