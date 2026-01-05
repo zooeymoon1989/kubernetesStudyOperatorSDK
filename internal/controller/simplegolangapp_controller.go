@@ -94,8 +94,9 @@ func (r *SimpleGolangAppReconciler) Reconcile(ctx context.Context, req ctrl.Requ
 
 	//label
 	labels := map[string]string{
-		"app.kubernetes.io/name":    cr.Name,
-		"app.kubernetes.io/part-of": ContainerName,
+		"app.kubernetes.io/name":     "simple-golang",
+		"app.kubernetes.io/part-of":  "simple-golang",
+		"app.kubernetes.io/instance": "simple-golang",
 	}
 
 	depName := cr.Name + "-deployment"
