@@ -115,7 +115,7 @@ func (r *SimpleGolangAppReconciler) Reconcile(ctx context.Context, req ctrl.Requ
 		dep.Spec.Replicas = &replicas
 		dep.Spec.Template.Spec.Containers = []corev1.Container{}
 		dep.Spec.Selector = &metav1.LabelSelector{MatchLabels: labels}
-
+		dep.Spec.Template.ObjectMeta.Labels = labels
 		dep.Spec.Template.Spec.Containers = []corev1.Container{{
 			Name:            ContainerName,
 			Image:           Image,
