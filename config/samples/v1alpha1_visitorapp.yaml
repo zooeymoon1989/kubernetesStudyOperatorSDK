@@ -1,9 +1,0 @@
-apiVersion: osuk8s.site/v1alpha1
-kind: VisitorApp
-metadata:
-  labels:
-    app.kubernetes.io/name: kubernetesstudyoperatorsdk
-    app.kubernetes.io/managed-by: kustomize
-  name: visitorapp-sample
-spec:
-  # TODO(user): Add fields here
