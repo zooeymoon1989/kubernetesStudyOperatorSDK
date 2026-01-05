@@ -82,7 +82,7 @@ func (r *SimpleGolangAppReconciler) Reconcile(ctx context.Context, req ctrl.Requ
 		replicas = *cr.Spec.Replicas
 	}
 
-	port := int32(80)
+	port := int32(ContainerPort)
 	if cr.Spec.Port != nil {
 		port = *cr.Spec.Port
 	}
@@ -98,7 +98,7 @@ func (r *SimpleGolangAppReconciler) Reconcile(ctx context.Context, req ctrl.Requ
 		"app.kubernetes.io/part-of": ContainerName,
 	}
 
-	depName := cr.Name + "-dep"
+	depName := cr.Name + "-deployment"
 	dep := &appsv1.Deployment{
 		ObjectMeta: metav1.ObjectMeta{
 			Name:      depName,
@@ -127,7 +127,7 @@ func (r *SimpleGolangAppReconciler) Reconcile(ctx context.Context, req ctrl.Requ
 				ProbeHandler: corev1.ProbeHandler{
 					HTTPGet: &corev1.HTTPGetAction{
 						Path: "/ping",
-						Port: intstr.FromString(strconv.Itoa(ContainerPort)),
+						Port: intstr.FromInt32(ContainerPort),
 					},
 				},
 				InitialDelaySeconds: 5,
@@ -139,7 +139,7 @@ func (r *SimpleGolangAppReconciler) Reconcile(ctx context.Context, req ctrl.Requ
 				ProbeHandler: corev1.ProbeHandler{
 					HTTPGet: &corev1.HTTPGetAction{
 						Path: "/ping",
-						Port: intstr.FromString(strconv.Itoa(ContainerPort)),
+						Port: intstr.FromInt32(ContainerPort),
 					},
 				},
 				InitialDelaySeconds: 2,
