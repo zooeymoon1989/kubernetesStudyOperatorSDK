@@ -18,7 +18,6 @@ package controller
 
 import (
 	"context"
-	"strconv"
 
 	appsv1 "k8s.io/api/apps/v1"
 	corev1 "k8s.io/api/core/v1"
@@ -177,7 +176,7 @@ func (r *SimpleGolangAppReconciler) Reconcile(ctx context.Context, req ctrl.Requ
 		svc.Spec.Ports = []corev1.ServicePort{{
 			Name:       "http",
 			Port:       port,
-			TargetPort: intstr.FromString(strconv.Itoa(ContainerPort)),
+			TargetPort: intstr.FromInt32(ContainerPort),
 			Protocol:   corev1.ProtocolTCP,
 		}}
 		return nil
