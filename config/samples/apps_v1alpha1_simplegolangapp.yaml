@@ -2,11 +2,11 @@ apiVersion: apps.osuk8s.site/v1alpha1
 kind: SimpleGolangApp
 metadata:
   labels:
-    "app.kubernetes.io/name": "simple-golang",
-    "app.kubernetes.io/part-of": "simple-golang",
+    app.kubernetes.io/name: simple-golang,
+    app.kubernetes.io/part-of: simple-golang,
   name: simple-golang
   namespace: default
 spec:
   image: zooeymoon1989/simple-golang:latest
-  replicas: 3
+  replicas: 1
   port: 80
