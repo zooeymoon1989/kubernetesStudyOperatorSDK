@@ -21,7 +21,6 @@ import (
 
 	appsv1 "k8s.io/api/apps/v1"
 	corev1 "k8s.io/api/core/v1"
-	apierrors "k8s.io/apimachinery/pkg/api/errors"
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
 	"k8s.io/apimachinery/pkg/runtime"
 	"k8s.io/apimachinery/pkg/types"
@@ -34,6 +33,7 @@ import (
 	appsv1alpha1 "github.com/zooeymoon1989/kubernetesStudyOperatorSDK/api/v1alpha1"
 )
 
+const SimpleGolangAppFinalizer = "apps.osuk8s.site/finalizer"
 const Image = "zooeymoon1989/simple-golang:latest"
 const ContainerName = "simple-golang"
 const ContainerPortName = "http"
@@ -68,10 +68,36 @@ func (r *SimpleGolangAppReconciler) Reconcile(ctx context.Context, req ctrl.Requ
 	var cr appsv1alpha1.SimpleGolangApp
 
 	if err := r.Get(ctx, req.NamespacedName, &cr); err != nil {
-		if apierrors.IsNotFound(err) {
-			return ctrl.Result{}, nil
+		return ctrl.Result{}, client.IgnoreNotFound(err)
+	}
+
+	// 如果对象进入删除流程：清理 + 移除 finalizer
+	if !cr.DeletionTimestamp.IsZero() {
+		if controllerutil.ContainsFinalizer(&cr, SimpleGolangAppFinalizer) {
+			// (A) 这里做你的清理逻辑：
+			// 例：删除你创建的“外部/跨 namespace/没有 ownerRef”的资源
+			// err := r.cleanupExternalResources(ctx, &app)
+			// if err != nil { return ctrl.Result{}, err }
+
+			// (B) 清理成功后移除 finalizer
+			patch := client.MergeFrom(cr.DeepCopy())
+			controllerutil.RemoveFinalizer(&cr, SimpleGolangAppFinalizer)
+			if err := r.Patch(ctx, &cr, patch); err != nil {
+				return ctrl.Result{}, err
+			}
 		}
-		return ctrl.Result{}, err
+		// 删除流程不要再创建/更新子资源了
+		return ctrl.Result{}, nil
+	}
+
+	// 3) 正常流程：确保 finalizer 已添加
+	if !controllerutil.ContainsFinalizer(&cr, SimpleGolangAppFinalizer) {
+		old := cr.DeepCopy()
+		controllerutil.AddFinalizer(&cr, SimpleGolangAppFinalizer)
+		if err := r.Patch(ctx, &cr, client.MergeFrom(old)); err != nil {
+			return ctrl.Result{}, err
+		}
+		return ctrl.Result{}, nil
 	}
 
 	// defaults
@@ -95,7 +121,7 @@ func (r *SimpleGolangAppReconciler) Reconcile(ctx context.Context, req ctrl.Requ
 	labels := map[string]string{
 		"app.kubernetes.io/name":     "simple-golang",
 		"app.kubernetes.io/part-of":  "simple-golang",
-		"app.kubernetes.io/instance": "simple-golang",
+		"app.kubernetes.io/instance": cr.Name,
 	}
 
 	depName := cr.Name + "-deployment"
@@ -120,14 +146,14 @@ func (r *SimpleGolangAppReconciler) Reconcile(ctx context.Context, req ctrl.Requ
 			Image:           image,
 			ImagePullPolicy: corev1.PullIfNotPresent,
 			Ports: []corev1.ContainerPort{{
-				ContainerPort: ContainerPort,
+				ContainerPort: port,
 				Name:          ContainerPortName,
 			}},
 			LivenessProbe: &corev1.Probe{
 				ProbeHandler: corev1.ProbeHandler{
 					HTTPGet: &corev1.HTTPGetAction{
 						Path: "/ping",
-						Port: intstr.FromInt32(ContainerPort),
+						Port: intstr.FromInt32(port),
 					},
 				},
 				InitialDelaySeconds: 5,
@@ -139,7 +165,7 @@ func (r *SimpleGolangAppReconciler) Reconcile(ctx context.Context, req ctrl.Requ
 				ProbeHandler: corev1.ProbeHandler{
 					HTTPGet: &corev1.HTTPGetAction{
 						Path: "/ping",
-						Port: intstr.FromInt32(ContainerPort),
+						Port: intstr.FromInt32(port),
 					},
 				},
 				InitialDelaySeconds: 2,
@@ -176,7 +202,7 @@ func (r *SimpleGolangAppReconciler) Reconcile(ctx context.Context, req ctrl.Requ
 		svc.Spec.Ports = []corev1.ServicePort{{
 			Name:       "http",
 			Port:       port,
-			TargetPort: intstr.FromInt32(ContainerPort),
+			TargetPort: intstr.FromInt32(port),
 			Protocol:   corev1.ProtocolTCP,
 		}}
 		return nil
@@ -196,7 +222,8 @@ func (r *SimpleGolangAppReconciler) Reconcile(ctx context.Context, req ctrl.Requ
 	}
 
 	if err := r.Status().Patch(ctx, &cr, client.MergeFrom(old)); err != nil {
-		logger.Error(err, "failed to patch Deployment status")
+		logger.Error(err, "failed to patch SimpleGolangApp status")
+		return ctrl.Result{}, err
 	}
 
 	return ctrl.Result{}, nil
