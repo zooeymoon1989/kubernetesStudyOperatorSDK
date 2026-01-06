@@ -117,7 +117,7 @@ func (r *SimpleGolangAppReconciler) Reconcile(ctx context.Context, req ctrl.Requ
 		dep.Spec.Template.ObjectMeta.Labels = labels
 		dep.Spec.Template.Spec.Containers = []corev1.Container{{
 			Name:            ContainerName,
-			Image:           Image,
+			Image:           image,
 			ImagePullPolicy: corev1.PullIfNotPresent,
 			Ports: []corev1.ContainerPort{{
 				ContainerPort: ContainerPort,
@@ -185,15 +185,18 @@ func (r *SimpleGolangAppReconciler) Reconcile(ctx context.Context, req ctrl.Requ
 	if err != nil {
 		return ctrl.Result{}, err
 	}
-
+	old := cr.DeepCopy()
+	cr.Status.ServiceName = svcName
+	cr.Status.ReadyReplicas = 0
 	// 4) Update Status
 	var currentDep appsv1.Deployment
-	if err := r.Get(ctx, types.NamespacedName{Name: cr.Name, Namespace: cr.Namespace}, &currentDep); err == nil {
+
+	if err := r.Get(ctx, types.NamespacedName{Name: depName, Namespace: cr.Namespace}, &currentDep); err == nil {
 		cr.Status.ReadyReplicas = currentDep.Status.ReadyReplicas
-		cr.Status.ServiceName = svcName
-		if err := r.Status().Update(ctx, &cr); err != nil {
-			logger.Error(err, "failed to update deployment")
-		}
+	}
+
+	if err := r.Status().Patch(ctx, &cr, client.MergeFrom(old)); err != nil {
+		logger.Error(err, "failed to patch Deployment status")
 	}
 
 	return ctrl.Result{}, nil
