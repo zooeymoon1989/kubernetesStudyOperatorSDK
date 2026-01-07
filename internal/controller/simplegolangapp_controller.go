@@ -19,8 +19,13 @@ package controller
 import (
 	"context"
 
+	"reflect"
+
 	appsv1 "k8s.io/api/apps/v1"
 	corev1 "k8s.io/api/core/v1"
+
+	//apierrors "k8s.io/apimachinery/pkg/api/errors"
+	"k8s.io/apimachinery/pkg/api/meta"
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
 	"k8s.io/apimachinery/pkg/runtime"
 	"k8s.io/apimachinery/pkg/types"
@@ -52,6 +57,7 @@ type SimpleGolangAppReconciler struct {
 // +kubebuilder:rbac:groups=apps,resources=deployments,verbs=get;list;watch;create;update;patch;delete
 // +kubebuilder:rbac:groups="",resources=services,verbs=get;list;watch;create;update;patch;delete
 // +kubebuilder:rbac:groups="",resources=pods,verbs=get;list;watch
+// +kubebuilder:rbac:groups="",resources=events,verbs=create;patch
 
 // Reconcile is part of the main kubernetes reconciliation loop which aims to
 // move the current state of the cluster closer to the desired state.
@@ -131,11 +137,13 @@ func (r *SimpleGolangAppReconciler) Reconcile(ctx context.Context, req ctrl.Requ
 			Namespace: cr.Namespace,
 		},
 	}
-	if err := ctrl.SetControllerReference(&cr, dep, r.Scheme); err != nil {
-		return ctrl.Result{}, err
-	}
 
 	_, err := controllerutil.CreateOrPatch(ctx, r.Client, dep, func() error {
+
+		if err := ctrl.SetControllerReference(&cr, dep, r.Scheme); err != nil {
+			return err
+		}
+
 		dep.Labels = labels
 		dep.Spec.Replicas = &replicas
 		dep.Spec.Template.Spec.Containers = []corev1.Container{}
@@ -190,11 +198,12 @@ func (r *SimpleGolangAppReconciler) Reconcile(ctx context.Context, req ctrl.Requ
 		},
 	}
 
-	if err := ctrl.SetControllerReference(&cr, svc, r.Scheme); err != nil {
-		return ctrl.Result{}, err
-	}
-
 	_, err = controllerutil.CreateOrUpdate(ctx, r.Client, svc, func() error {
+
+		if err := ctrl.SetControllerReference(&cr, svc, r.Scheme); err != nil {
+			return err
+		}
+
 		svc.Labels = labels
 		// 不要碰 ClusterIP
 		svc.Spec.Type = corev1.ServiceTypeClusterIP
@@ -213,17 +222,99 @@ func (r *SimpleGolangAppReconciler) Reconcile(ctx context.Context, req ctrl.Requ
 	}
 	old := cr.DeepCopy()
 	cr.Status.ServiceName = svcName
-	cr.Status.ReadyReplicas = 0
+	cr.Status.ObservedGeneration = cr.GetGeneration()
 	// 4) Update Status
 	var currentDep appsv1.Deployment
 
-	if err := r.Get(ctx, types.NamespacedName{Name: depName, Namespace: cr.Namespace}, &currentDep); err == nil {
+	// desired replicas (default already applied above)
+	desired := replicas
+
+	if err := r.Get(ctx, types.NamespacedName{Namespace: cr.Namespace, Name: depName}, &currentDep); err != nil {
+		// Deployment fetch failed => Degraded
+		cr.Status.ReadyReplicas = 0
+
+		meta.SetStatusCondition(&cr.Status.Conditions, metav1.Condition{
+			Type:               "Degraded",
+			Status:             metav1.ConditionTrue,
+			Reason:             "GetDeploymentFailed",
+			Message:            err.Error(),
+			ObservedGeneration: cr.GetGeneration(),
+		})
+
+		// When we cannot even read the Deployment, we are not available.
+		meta.SetStatusCondition(&cr.Status.Conditions, metav1.Condition{
+			Type:               "Available",
+			Status:             metav1.ConditionFalse,
+			Reason:             "NotAvailable",
+			Message:            "Deployment is not readable yet",
+			ObservedGeneration: cr.GetGeneration(),
+		})
+
+		// Still progressing until the desired state is observed.
+		meta.SetStatusCondition(&cr.Status.Conditions, metav1.Condition{
+			Type:               "Progressing",
+			Status:             metav1.ConditionTrue,
+			Reason:             "Reconciling",
+			Message:            "Waiting for Deployment to become available",
+			ObservedGeneration: cr.GetGeneration(),
+		})
+	} else {
 		cr.Status.ReadyReplicas = currentDep.Status.ReadyReplicas
+
+		// If we can read the Deployment, we are not degraded (clear any previous error).
+		meta.SetStatusCondition(&cr.Status.Conditions, metav1.Condition{
+			Type:               "Degraded",
+			Status:             metav1.ConditionFalse,
+			Reason:             "AsExpected",
+			Message:            "Deployment is readable",
+			ObservedGeneration: cr.GetGeneration(),
+		})
+
+		// Available: ready replicas meets (or exceeds) desired.
+		if currentDep.Status.ReadyReplicas >= desired {
+			meta.SetStatusCondition(&cr.Status.Conditions, metav1.Condition{
+				Type:               "Available",
+				Status:             metav1.ConditionTrue,
+				Reason:             "Ready",
+				Message:            "Deployment has the desired number of ready replicas",
+				ObservedGeneration: cr.GetGeneration(),
+			})
+		} else {
+			meta.SetStatusCondition(&cr.Status.Conditions, metav1.Condition{
+				Type:               "Available",
+				Status:             metav1.ConditionFalse,
+				Reason:             "NotReady",
+				Message:            "Deployment does not have the desired number of ready replicas yet",
+				ObservedGeneration: cr.GetGeneration(),
+			})
+		}
+
+		// Progressing: not yet converged to desired ready replicas.
+		if currentDep.Status.ReadyReplicas == desired {
+			meta.SetStatusCondition(&cr.Status.Conditions, metav1.Condition{
+				Type:               "Progressing",
+				Status:             metav1.ConditionFalse,
+				Reason:             "Reconciled",
+				Message:            "Deployment is reconciled to desired replicas",
+				ObservedGeneration: cr.GetGeneration(),
+			})
+		} else {
+			meta.SetStatusCondition(&cr.Status.Conditions, metav1.Condition{
+				Type:               "Progressing",
+				Status:             metav1.ConditionTrue,
+				Reason:             "Reconciling",
+				Message:            "Deployment is progressing",
+				ObservedGeneration: cr.GetGeneration(),
+			})
+		}
 	}
 
-	if err := r.Status().Patch(ctx, &cr, client.MergeFrom(old)); err != nil {
-		logger.Error(err, "failed to patch SimpleGolangApp status")
-		return ctrl.Result{}, err
+	// 只在 status 真变了才 patch
+	if !reflect.DeepEqual(old.Status, cr.Status) {
+		if err := r.Status().Patch(ctx, &cr, client.MergeFrom(old)); err != nil {
+			logger.Error(err, "failed to patch SimpleGolangApp status")
+			return ctrl.Result{}, err
+		}
 	}
 
 	return ctrl.Result{}, nil

@@ -25,29 +25,48 @@ import (
 
 // SimpleGolangAppSpec defines the desired state of SimpleGolangApp.
 type SimpleGolangAppSpec struct {
-	// INSERT ADDITIONAL SPEC FIELDS - desired state of cluster
-	// Important: Run "make" to regenerate code after modifying this file
-
+	// +kubebuilder:validation:MinLength=1
+	// +kubebuilder:validation:Optional
 	// Image is the container image to run
 	Image string `json:"image,omitempty"`
 
+	// +kubebuilder:default:=1
+	// +kubebuilder:validation:Minimum=1
+	// +kubebuilder:validation:Optional
 	// Replicas is the desired number of pods
 	Replicas *int32 `json:"replicas,omitempty"`
 
+	// +kubebuilder:default:=80
+	// +kubebuilder:validation:Minimum=1
+	// +kubebuilder:validation:Maximum=65535
+	// +kubebuilder:validation:Optional
 	// Port is the container port and service port
 	Port *int32 `json:"port,omitempty"`
 }
 
 // SimpleGolangAppStatus defines the observed state of SimpleGolangApp.
 type SimpleGolangAppStatus struct {
-	// INSERT ADDITIONAL STATUS FIELD - define observed state of cluster
-	// Important: Run "make" to regenerate code after modifying this file
-	ReadyReplicas int32  `json:"readyReplicas,omitempty"`
-	ServiceName   string `json:"serviceName,omitempty"`
+	// +kubebuilder:validation:Optional
+	ReadyReplicas int32 `json:"readyReplicas,omitempty"`
+	// +kubebuilder:validation:Optional
+	ServiceName string `json:"serviceName,omitempty"`
+	// +kubebuilder:validation:Optional
+	ObservedGeneration int64 `json:"observedGeneration,omitempty"`
+
+	// Conditions represent the latest available observations of an object's state.
+	// +kubebuilder:validation:Optional
+	// +kubebuilder:patchStrategy=merge
+	// +kubebuilder:patchMergeKey=type
+	Conditions []metav1.Condition `json:"conditions,omitempty"`
 }
 
 // +kubebuilder:object:root=true
 // +kubebuilder:subresource:status
+// +kubebuilder:printcolumn:name="Image",type=string,JSONPath=`.spec.image`
+// +kubebuilder:printcolumn:name="Replicas",type=integer,JSONPath=`.spec.replicas`
+// +kubebuilder:printcolumn:name="Ready",type=integer,JSONPath=`.status.readyReplicas`
+// +kubebuilder:printcolumn:name="Service",type=string,JSONPath=`.status.serviceName`
+// +kubebuilder:printcolumn:name="Age",type=date,JSONPath=`.metadata.creationTimestamp`
 
 // SimpleGolangApp is the Schema for the simplegolangapps API.
 type SimpleGolangApp struct {
