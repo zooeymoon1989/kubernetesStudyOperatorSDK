@@ -8,6 +8,6 @@ metadata:
   name: simple-golang
   namespace: default
 spec:
-  image: zooeymoon1989/simple-golang:latest
+  image: zooeymoon1989/simple-golang-operator:dev
   replicas: 3
   port: 80
