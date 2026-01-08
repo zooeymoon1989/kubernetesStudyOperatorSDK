@@ -26,6 +26,7 @@ import (
 	appsv1 "k8s.io/api/apps/v1"
 	corev1 "k8s.io/api/core/v1"
 	"k8s.io/client-go/tools/record"
+	gatewayv1 "sigs.k8s.io/gateway-api/apis/v1"
 
 	//apierrors "k8s.io/apimachinery/pkg/api/errors"
 	appsv1alpha1 "github.com/zooeymoon1989/kubernetesStudyOperatorSDK/api/v1alpha1"
@@ -82,6 +83,8 @@ func init() {
 	ctrlmetrics.Registry.MustRegister(reconcileTotal, reconcileDuration, readyReplicasGauge)
 }
 
+func ptr[T any](v T) *T { return &v }
+
 // RBAC（一定要加，不然会 403）
 // +kubebuilder:rbac:groups=apps.osuk8s.site,resources=simplegolangapps,verbs=get;list;watch;create;update;patch;delete
 // +kubebuilder:rbac:groups=apps.osuk8s.site,resources=simplegolangapps/status,verbs=get;update;patch
@@ -90,6 +93,10 @@ func init() {
 // +kubebuilder:rbac:groups="",resources=services,verbs=get;list;watch;create;update;patch;delete
 // +kubebuilder:rbac:groups="",resources=pods,verbs=get;list;watch
 // +kubebuilder:rbac:groups="",resources=events,verbs=create;patch
+// 添加httproutes的rbac
+// +kubebuilder:rbac:groups=gateway.networking.k8s.io,resources=httproutes,verbs=get;list;watch;create;update;patch;delete
+// 如果你未来需要读 Gateway（校验 parentRefs、或者自动发现 listener）
+// +kubebuilder:rbac:groups=gateway.networking.k8s.io,resources=gateways,verbs=get;list;watch
 
 // Reconcile is part of the main kubernetes reconciliation loop which aims to
 // move the current state of the cluster closer to the desired state.
@@ -177,6 +184,11 @@ func (r *SimpleGolangAppReconciler) Reconcile(ctx context.Context, req ctrl.Requ
 	}
 
 	//label
+	selectorLabels := map[string]string{
+		"app.kubernetes.io/name":     "simple-golang",
+		"app.kubernetes.io/instance": cr.Name,
+	}
+
 	labels := map[string]string{
 		"app.kubernetes.io/name":     "simple-golang",
 		"app.kubernetes.io/part-of":  "simple-golang",
@@ -201,7 +213,7 @@ func (r *SimpleGolangAppReconciler) Reconcile(ctx context.Context, req ctrl.Requ
 
 		dep.Labels = labels
 		dep.Spec.Replicas = &replicas
-		dep.Spec.Selector = &metav1.LabelSelector{MatchLabels: labels}
+		dep.Spec.Selector = &metav1.LabelSelector{MatchLabels: selectorLabels}
 		dep.Spec.Template.ObjectMeta.Labels = labels
 		dep.Spec.Template.Spec.Containers = []corev1.Container{{
 			Name:            ContainerName,
@@ -271,7 +283,7 @@ func (r *SimpleGolangAppReconciler) Reconcile(ctx context.Context, req ctrl.Requ
 		svc.Labels = labels
 		// 不要碰 ClusterIP
 		svc.Spec.Type = corev1.ServiceTypeClusterIP
-		svc.Spec.Selector = labels
+		svc.Spec.Selector = selectorLabels
 		svc.Spec.Ports = []corev1.ServicePort{{
 			Name:       "http",
 			Port:       port,
@@ -391,6 +403,63 @@ func (r *SimpleGolangAppReconciler) Reconcile(ctx context.Context, req ctrl.Requ
 		}
 	}
 
+	// 4) Desired HTTPRoute (Gateway API)
+	routeName := cr.Name + "-route"
+	route := &gatewayv1.HTTPRoute{
+		ObjectMeta: metav1.ObjectMeta{
+			Name:      routeName,
+			Namespace: cr.Namespace,
+		},
+	}
+
+	routeOp, err := controllerutil.CreateOrPatch(ctx, r.Client, route, func() error {
+		if err := ctrl.SetControllerReference(&cr, route, r.Scheme); err != nil {
+			return err
+		}
+
+		route.Labels = labels
+
+		// parentRefs: traefik-gateway / same namespace
+		route.Spec.ParentRefs = []gatewayv1.ParentReference{{
+			Name:      gatewayv1.ObjectName("traefik-gateway"),
+			Namespace: ptr(gatewayv1.Namespace(cr.Namespace)),
+		}}
+
+		route.Spec.Hostnames = []gatewayv1.Hostname{gatewayv1.Hostname("www.osuk8s.site")}
+
+		pathType := gatewayv1.PathMatchPathPrefix
+		route.Spec.Rules = []gatewayv1.HTTPRouteRule{{
+			Matches: []gatewayv1.HTTPRouteMatch{{
+				Path: &gatewayv1.HTTPPathMatch{
+					Type:  &pathType,
+					Value: ptr("/"),
+				},
+			}},
+			BackendRefs: []gatewayv1.HTTPBackendRef{{
+				BackendRef: gatewayv1.BackendRef{
+					BackendObjectReference: gatewayv1.BackendObjectReference{
+						Name: gatewayv1.ObjectName(svcName),
+						Port: ptr(gatewayv1.PortNumber(port)),
+					},
+				},
+			}},
+		}}
+
+		return nil
+	})
+
+	if err != nil {
+		r.Recorder.Eventf(&cr, corev1.EventTypeWarning, "ReconcileError",
+			"Failed to reconcile HTTPRoute: %v", err)
+		return ctrl.Result{}, err
+	}
+
+	if routeOp != controllerutil.OperationResultNone {
+		r.Recorder.Eventf(&cr, corev1.EventTypeNormal, "Reconciled",
+			"HTTPRoute %s %s (host=%s backend=%s:%d)",
+			route.Name, string(routeOp), "www.osuk8s.site", svcName, port)
+	}
+
 	return ctrl.Result{}, nil
 }
 
@@ -403,6 +472,8 @@ func (r *SimpleGolangAppReconciler) SetupWithManager(mgr ctrl.Manager) error {
 		For(&appsv1alpha1.SimpleGolangApp{}).
 		Owns(&appsv1.Deployment{}).
 		Owns(&corev1.Service{}).
+		// 添加own httproutes
+		Owns(&gatewayv1.HTTPRoute{}).
 		Named("simplegolangapp").
 		Complete(r)
 }
