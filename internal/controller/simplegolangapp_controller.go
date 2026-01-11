@@ -103,6 +103,7 @@ func ptr[T any](v T) *T { return &v }
 // +kubebuilder:rbac:groups=apps,resources=deployments;replicasets,verbs=get;list;watch;create;update;patch;delete
 // Reconcile is part of the main kubernetes reconciliation loop which aims to
 // move the current state of the cluster closer to the desired state.
+// --- 添加下面这一行，解决之前的 Forbidden 报错 ---
 // TODO(user): Modify the Reconcile function to compare the state specified by
 // the SimpleGolangApp object against the actual cluster state, and then
 // perform operations to make the cluster state reflect the state specified by
