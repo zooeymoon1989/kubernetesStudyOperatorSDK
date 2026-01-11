@@ -1,0 +1,52 @@
+apiVersion: operators.coreos.com/v1alpha1
+kind: ClusterServiceVersion
+metadata:
+  annotations:
+    alm-examples: '[]'
+    capabilities: Basic Install
+  name: kubernetesstudyoperatorsdk.v0.0.0
+  namespace: placeholder
+spec:
+  apiservicedefinitions: {}
+  customresourcedefinitions:
+    owned:
+    - description: SimpleGolangApp is the Schema for the simplegolangapps API.
+      displayName: Simple Golang App
+      kind: SimpleGolangApp
+      name: simplegolangapps.apps.osuk8s.site
+      version: v1alpha1
+  description: just for testing
+  displayName: simple-golang-app
+  icon:
+  - base64data: ""
+    mediatype: ""
+  install:
+    spec:
+      deployments: null
+    strategy: ""
+  installModes:
+  - supported: false
+    type: OwnNamespace
+  - supported: false
+    type: SingleNamespace
+  - supported: false
+    type: MultiNamespace
+  - supported: true
+    type: AllNamespaces
+  keywords:
+  - kubernetes
+  - operator
+  - golang
+  - traefik
+  - gateway-api
+  - httproute
+  - ingress
+  - traffic-management
+  - automation
+  links:
+  - name: Kubernetesstudyoperatorsdk
+    url: https://kubernetesstudyoperatorsdk.domain
+  maturity: alpha
+  provider:
+    name: osuk8s.site
+  version: 0.0.1

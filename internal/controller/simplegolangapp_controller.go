@@ -89,17 +89,18 @@ func ptr[T any](v T) *T { return &v }
 // +kubebuilder:rbac:groups=apps.osuk8s.site,resources=simplegolangapps,verbs=get;list;watch;create;update;patch;delete
 // +kubebuilder:rbac:groups=apps.osuk8s.site,resources=simplegolangapps/status,verbs=get;update;patch
 // +kubebuilder:rbac:groups=apps.osuk8s.site,resources=simplegolangapps/finalizers,verbs=update
-// +kubebuilder:rbac:groups=apps,resources=deployments,verbs=get;list;watch;create;update;patch;delete
-// +kubebuilder:rbac:groups="",resources=services,verbs=get;list;watch;create;update;patch;delete
 // +kubebuilder:rbac:groups="",resources=pods,verbs=get;list;watch
 // +kubebuilder:rbac:groups="",resources=events,verbs=create;patch
 // 添加httproutes的rbac
 // +kubebuilder:rbac:groups=gateway.networking.k8s.io,resources=httproutes,verbs=get;list;watch;create;update;patch;delete
 // 如果你未来需要读 Gateway（校验 parentRefs、或者自动发现 listener）
 // +kubebuilder:rbac:groups=gateway.networking.k8s.io,resources=gateways,verbs=get;list;watch
+//
 //	添加事件event功能的权限
+//
 // +kubebuilder:rbac:groups=events.k8s.io,resources=events,verbs=create;patch;update
-
+// +kubebuilder:rbac:groups="",resources=services;pods;events;endpoints,verbs=get;list;watch;create;update;patch;delete
+// +kubebuilder:rbac:groups=apps,resources=deployments;replicasets,verbs=get;list;watch;create;update;patch;delete
 // Reconcile is part of the main kubernetes reconciliation loop which aims to
 // move the current state of the cluster closer to the desired state.
 // TODO(user): Modify the Reconcile function to compare the state specified by
